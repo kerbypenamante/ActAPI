@@ -247,6 +247,10 @@
     let editingId = null;
     let users = [];
 
+    function saveToLocalStorage() {
+        localStorage.setItem("crud_users", JSON.stringify(users));
+    }
+
     function showStatus(message, type) {
         statusMessage.textContent = message;
         statusMessage.className = type;
@@ -258,6 +262,15 @@
     }
 
     async function getUsers() {
+        // Check if records are saved in LocalStorage first
+        const savedUsers = localStorage.getItem("crud_users");
+        if (savedUsers) {
+            users = JSON.parse(savedUsers);
+            displayUsers();
+            showStatus("Loaded records from local browser storage.", "success");
+            return;
+        }
+
         try {
             setLoading(true);
             showStatus("Loading records from API...", "loading");
@@ -278,9 +291,10 @@
                 body: post.body
             }));
 
+            saveToLocalStorage();
             displayUsers();
 
-            showStatus("Records loaded successfully.", "success");
+            showStatus("Records loaded successfully from API.", "success");
         } catch (error) {
             console.error(error);
             showStatus("Failed to load records: " + error.message, "error");
@@ -314,49 +328,48 @@
     }
 
     async function addUser(userData) {
-    try {
-        showStatus("Adding record...", "loading");
+        try {
+            showStatus("Adding record...", "loading");
 
-        const response = await fetch(API_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                title: `${userData.firstName} ${userData.lastName}`,
-                body: userData.email,
-                userId: 1
-            })
-        });
+            const response = await fetch(API_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    title: `${userData.firstName} ${userData.lastName}`,
+                    body: userData.email,
+                    userId: 1
+                })
+            });
 
-        if (!response.ok) {
-            throw new Error(`HTTP Error: ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP Error: ${response.status}`);
+            }
+
+            const newId = users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 1;
+
+            const newUser = {
+                id: newId,
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                email: userData.email
+            };
+
+            users.unshift(newUser);
+            saveToLocalStorage();
+            displayUsers();
+            userForm.reset();
+
+            showStatus(
+                `Record added successfully! New ID: ${newId}.`,
+                "success"
+            );
+        } catch (error) {
+            console.error(error);
+            showStatus("Failed to add record: " + error.message, "error");
         }
-
-        const created = await response.json();
-
-        const newId = users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 11;
-
-        const newUser = {
-            id: newId,
-            firstName: userData.firstName,
-            lastName: userData.lastName,
-            email: userData.email
-        };
-
-        users.unshift(newUser);
-        displayUsers();
-        userForm.reset();
-
-        showStatus(
-            `Record added successfully! New ID: ${newId}.`,
-            "success"
-        );
-    } catch (error) {
-        console.error(error);
-        showStatus("Failed to add record: " + error.message, "error");
     }
-}
 
     async function updateUser(id, userData) {
         try {
@@ -375,21 +388,16 @@
                 })
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP Error: ${response.status}`);
-            }
-
-            const updated = await response.json();
-
             users = users.map(user =>
                 user.id === id ? { ...user, firstName: userData.firstName, lastName: userData.lastName, email: userData.email } : user
             );
 
+            saveToLocalStorage();
             displayUsers();
             cancelEdit();
 
             showStatus(
-                `Record ${updated.id} updated successfully!`,
+                `Record ${id} updated successfully!`,
                 "success"
             );
         } catch (error) {
@@ -406,15 +414,12 @@
         try {
             showStatus("Deleting record...", "loading");
 
-            const response = await fetch(`${API_URL}/${id}`, {
+            await fetch(`${API_URL}/${id}`, {
                 method: "DELETE"
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP Error: ${response.status}`);
-            }
-
             users = users.filter(user => user.id !== id);
+            saveToLocalStorage();
             displayUsers();
 
             showStatus(
@@ -480,6 +485,7 @@
             await addUser(userData);
         }
     });
+
     function escapeHTML(value) {
         const div = document.createElement("div");
         div.textContent = value;
